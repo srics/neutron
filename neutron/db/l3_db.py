@@ -114,6 +114,7 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
         return self._fields(res, fields)
 
     def create_router(self, context, router):
+        LOG.debug(' SRICS: l3_db: inside create_router')
         r = router['router']
         has_gw_info = False
         if EXTERNAL_GW_INFO in r:
@@ -135,6 +136,7 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
         return self._make_router_dict(router_db, process_extensions=False)
 
     def update_router(self, context, id, router):
+        LOG.debug(' SRICS: l3_db: inside update_router')
         r = router['router']
         has_gw_info = False
         gw_info = None
@@ -294,9 +296,9 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
             self._create_router_gw_port(context, router, network_id)
 
     def delete_router(self, context, id):
+        LOG.debug(' SRICS: l3_db: inside delete_router')
         with context.session.begin(subtransactions=True):
             router = self._get_router(context, id)
-
             # Ensure that the router is not used
             fips = self.get_floatingips_count(context.elevated(),
                                               filters={'router_id': [id]})

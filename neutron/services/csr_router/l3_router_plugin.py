@@ -30,10 +30,12 @@ from neutron.db import l3_agentschedulers_db
 from neutron.db import l3_gwmode_db
 from neutron.db import l3_rpc_base
 from neutron.db import model_base
+from neutron.openstack.common import log as logging
 from neutron.openstack.common import importutils
 from neutron.openstack.common import rpc
 from neutron.plugins.common import constants
 
+LOG = logging.getLogger(__name__)
 
 class L3RouterPluginRpcCallbacks(l3_rpc_base.L3RpcCallbackMixin):
 
@@ -102,6 +104,17 @@ class L3RouterPlugin(db_base_plugin_v2.CommonDbMixin,
         leveraging tehe l3 agent, the initial status fro the floating
         IP object will be DOWN.
         """
+        LOG.debug(' SRICS: csr_router:l3_router_plugin: inside create_floatingip()')
         return super(L3RouterPlugin, self).create_floatingip(
             context, floatingip,
             initial_status=q_const.FLOATINGIP_STATUS_DOWN)
+
+    def create_router(self, context, router):
+        """ CSR Create Router
+
+        :param context: Neutron request context
+        :param router:
+        :returns:
+        """
+        LOG.debug(' SRICS: csr_router:l3_router_plugin: inside create_router()')
+        return super(l3_gwmode_db.L3_NAT_db_mixin, self).create_router(context, router)

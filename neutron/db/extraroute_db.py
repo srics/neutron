@@ -64,6 +64,7 @@ class ExtraRoute_db_mixin(l3_db.L3_NAT_db_mixin):
         l3.ROUTERS, ['_extend_router_dict_extraroute'])
 
     def update_router(self, context, id, router):
+        LOG.debug(' SRICS: extraroute_db: inside update_router')
         r = router['router']
         with context.session.begin(subtransactions=True):
             #check if route exists and have permission to access
