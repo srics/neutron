@@ -35,6 +35,8 @@ from neutron.openstack.common import importutils
 from neutron.openstack.common import rpc
 from neutron.plugins.common import constants
 
+from csr_vm_mgr import CSRVMManager
+
 LOG = logging.getLogger(__name__)
 
 class L3RouterPluginRpcCallbacks(l3_rpc_base.L3RpcCallbackMixin):
@@ -104,7 +106,7 @@ class L3RouterPlugin(db_base_plugin_v2.CommonDbMixin,
         leveraging tehe l3 agent, the initial status fro the floating
         IP object will be DOWN.
         """
-        LOG.debug(' SRICS: csr_router:l3_router_plugin: inside create_floatingip()')
+        LOG.debug(' CSR-MSG: csr_router:l3_router_plugin: inside create_floatingip()')
         return super(L3RouterPlugin, self).create_floatingip(
             context, floatingip,
             initial_status=q_const.FLOATINGIP_STATUS_DOWN)
@@ -116,5 +118,22 @@ class L3RouterPlugin(db_base_plugin_v2.CommonDbMixin,
         :param router:
         :returns:
         """
-        LOG.debug(' SRICS: csr_router:l3_router_plugin: inside create_router()')
+        r = router['router']
+        LOG.debug(' CSR-MSG: csr_router:l3_router_plugin: inside create_router() name %s', r['name'])
+        csr_vm_mgr = CSRVMManager()
+        csr_vm_mgr.launch_csr(r['name'])
         return super(l3_gwmode_db.L3_NAT_db_mixin, self).create_router(context, router)
+
+    def delete_router(self, context, id):
+        """
+        :param context:
+        :param id:
+        :return:
+        """
+        router = self._get_router(context, id)
+        print router.name
+        r_name = router.name
+        LOG.debug(' CSR-MSG: csr_router:l3_router_plugin: inside delete_router() name %s', r_name)
+        csr_vm_mgr = CSRVMManager()
+        csr_vm_mgr.remove_csr(r_name)
+        return super(l3_gwmode_db.L3_NAT_db_mixin, self).delete_router(context, id)
