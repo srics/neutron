@@ -16,10 +16,15 @@
 #    under the License.
 #
 # @author: Bob Melander, Cisco Systems, Inc.
+# @author: Sridhar Ramaswamy, Cisco Systems, Inc.
 
+import os
 from oslo.config import cfg
 
 from neutron.api.rpc.agentnotifiers import l3_rpc_agent_api
+from neutron import context as neutron_context
+from neutron import manager
+from neutron.api.v2 import attributes
 from neutron.common import constants as q_const
 from neutron.common import rpc as q_rpc
 from neutron.common import topics
@@ -119,9 +124,16 @@ class L3RouterPlugin(db_base_plugin_v2.CommonDbMixin,
         :returns:
         """
         r = router['router']
-        LOG.debug(' CSR-MSG: csr_router:l3_router_plugin: inside create_router() name %s', r['name'])
-        csr_vm_mgr = CSRVMManager()
-        csr_vm_mgr.launch_csr(r['name'])
+        router_name = r['name']
+        tenant_id = r['tenant_id']
+
+        LOG.debug(' CSR-MSG: csr_router:l3_router_plugin: inside create_router() name %s tenant-id %s',
+                  router_name, tenant_id)
+        # TODO: connect with admin privilege
+
+        # Create mgmt vnic
+        port = self.create_vnic_port(context, router_name, tenant_id)
+        self.csr_vm_mgr.launch_csr(router_name, port['id'])
         return super(l3_gwmode_db.L3_NAT_db_mixin, self).create_router(context, router)
 
     def delete_router(self, context, id):
@@ -131,9 +143,70 @@ class L3RouterPlugin(db_base_plugin_v2.CommonDbMixin,
         :return:
         """
         router = self._get_router(context, id)
-        print router.name
-        r_name = router.name
-        LOG.debug(' CSR-MSG: csr_router:l3_router_plugin: inside delete_router() name %s', r_name)
-        csr_vm_mgr = CSRVMManager()
-        csr_vm_mgr.remove_csr(r_name)
+        router_name = router.name
+
+        LOG.debug(' CSR-MSG: csr_router:l3_router_plugin: inside delete_router() name %s', router_name)
+        self.csr_vm_mgr.remove_csr(router_name)
+
         return super(l3_gwmode_db.L3_NAT_db_mixin, self).delete_router(context, id)
+
+    def create_mgmt_vnic_port(self, context, router_name, tenant_id):
+        port_name = "_CSR_mgmt_port_" + router_name
+        # get "public" network id
+        net = self._core_plugin.get_networks(context,filters={'name':['public']}, fields=['id','name'])
+        network_id = net[0]['id']
+        LOG.debug(' CSR-MSG: create_vnic_port(): network id %s', net[0]['id'])
+        return self._create_vnic_port(context, port_name, tenant_id, network_id)
+
+    def create_private_vnic_port(self, context, router_name, tenant_id):
+        port_name = "_CSR_ingress_port_" + router_name
+        return self._create_vnic_port(context, port_name, tenant_id)
+
+    def create_public_vnic_port(self, context, router_name, tenant_id):
+        port_name = "_CSR_egress_port_" + router_name
+        # get  "public" network
+        net = self._core_plugin.get_networks(context,filters={'name':['public']}, fields=['id','name'])
+        network_id = net[0]['id']
+        LOG.debug(' CSR-MSG: create_vnic_port(): network id %s', net[0]['id'])
+        return self._create_vnic_port(context, port_name, tenant_id, network_id)
+
+    def _create_vnic_port(self, context, port_name, tenant_id, network_id=None):
+        LOG.debug(' CSR-MSG: create_vnic_port(): inside rname %s', rname)
+
+        # 1. Get admin tenant-id
+        # 2. Create port on "public" subnet
+        # Create port for mgmt interface
+
+        # TODO(Sridhar.R): revisit security group setting
+
+        # get id of "public" network
+        # net = self._core_plugin.get_networks(context,filters={'name':['public']}, fields=['id','name'])
+        # network_id = net[0]['id']
+        LOG.debug(' CSR-MSG: create_vnic_port(): network id %s', network_id)
+
+        # get id of "public-subnet" subnet
+        #subnet = self._core_plugin.get_subnets(context,filters={'name':['public-subnet']},fields=['id','name'])
+        subnet = self._core_plugin.get_subnets(context,filters=None,fields=['id','name'])
+        LOG.debug(' CSR-MSG: create_vnic_port(): subnet id %s', subnet)
+        subnet_id = '0c2ae3bd-26d7-44fa-bd6e-34f4521f7a5b'
+        #subnet_id = subnet[0]['id']
+
+        # Create port
+        port_spec = {'port': {
+                        'tenant_id': tenant_id,  # current tenant-id
+                        'admin_state_up': True,
+                        'name': 'csr-nic-1' + port_name,
+                        'network_id': network_id,
+                        'mac_address': attributes.ATTR_NOT_SPECIFIED,
+                        'fixed_ips': [{'subnet_id':subnet_id, 'ip_address' : '172.24.4.100'}],
+                        'security_groups': [],
+                        'device_id': "",
+                        'device_owner': ""
+                        }
+                    }
+
+        port = self._core_plugin.create_port(context, port_spec)
+        LOG.debug(' CSR-MSG: create_vnic_port(): port object %s', port)
+        LOG.debug(' CSR-MSG: create_vnic_port(): created port status %s', port['status'])
+        LOG.debug(' CSR-MSG: create_vnic_port(): created port id %s', port['id'])
+        return port
